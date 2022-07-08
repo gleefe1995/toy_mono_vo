@@ -118,6 +118,7 @@ classtest: /usr/lib/x86_64-linux-gnu/libopencv_text.so.3.2.0
 classtest: /usr/lib/x86_64-linux-gnu/libopencv_ximgproc.so.3.2.0
 classtest: /usr/lib/x86_64-linux-gnu/libopencv_xobjdetect.so.3.2.0
 classtest: /usr/lib/x86_64-linux-gnu/libopencv_xphoto.so.3.2.0
+classtest: /usr/local/lib/libpangolin.so
 classtest: /usr/lib/x86_64-linux-gnu/libopencv_video.so.3.2.0
 classtest: /usr/lib/x86_64-linux-gnu/libopencv_viz.so.3.2.0
 classtest: /usr/lib/x86_64-linux-gnu/libopencv_phase_unwrapping.so.3.2.0
@@ -133,6 +134,38 @@ classtest: /usr/lib/x86_64-linux-gnu/libopencv_videoio.so.3.2.0
 classtest: /usr/lib/x86_64-linux-gnu/libopencv_imgcodecs.so.3.2.0
 classtest: /usr/lib/x86_64-linux-gnu/libopencv_imgproc.so.3.2.0
 classtest: /usr/lib/x86_64-linux-gnu/libopencv_core.so.3.2.0
+classtest: /usr/lib/x86_64-linux-gnu/libOpenGL.so
+classtest: /usr/lib/x86_64-linux-gnu/libGLX.so
+classtest: /usr/lib/x86_64-linux-gnu/libGLU.so
+classtest: /usr/lib/x86_64-linux-gnu/libGLEW.so
+classtest: /usr/lib/x86_64-linux-gnu/libEGL.so
+classtest: /usr/lib/x86_64-linux-gnu/libSM.so
+classtest: /usr/lib/x86_64-linux-gnu/libICE.so
+classtest: /usr/lib/x86_64-linux-gnu/libX11.so
+classtest: /usr/lib/x86_64-linux-gnu/libXext.so
+classtest: /usr/lib/x86_64-linux-gnu/libOpenGL.so
+classtest: /usr/lib/x86_64-linux-gnu/libGLX.so
+classtest: /usr/lib/x86_64-linux-gnu/libGLU.so
+classtest: /usr/lib/x86_64-linux-gnu/libGLEW.so
+classtest: /usr/lib/x86_64-linux-gnu/libEGL.so
+classtest: /usr/lib/x86_64-linux-gnu/libSM.so
+classtest: /usr/lib/x86_64-linux-gnu/libICE.so
+classtest: /usr/lib/x86_64-linux-gnu/libX11.so
+classtest: /usr/lib/x86_64-linux-gnu/libXext.so
+classtest: /usr/lib/x86_64-linux-gnu/libdc1394.so
+classtest: /usr/lib/x86_64-linux-gnu/libavcodec.so
+classtest: /usr/lib/x86_64-linux-gnu/libavformat.so
+classtest: /usr/lib/x86_64-linux-gnu/libavutil.so
+classtest: /usr/lib/x86_64-linux-gnu/libswscale.so
+classtest: /usr/lib/x86_64-linux-gnu/libavdevice.so
+classtest: /usr/lib/libOpenNI.so
+classtest: /usr/lib/libOpenNI2.so
+classtest: /usr/lib/x86_64-linux-gnu/libpng.so
+classtest: /usr/lib/x86_64-linux-gnu/libz.so
+classtest: /usr/lib/x86_64-linux-gnu/libjpeg.so
+classtest: /usr/lib/x86_64-linux-gnu/libtiff.so
+classtest: /usr/lib/x86_64-linux-gnu/libIlmImf.so
+classtest: /usr/lib/x86_64-linux-gnu/liblz4.so
 classtest: CMakeFiles/classtest.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/gleefe/toy_mono_vo/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable classtest"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/classtest.dir/link.txt --verbose=$(VERBOSE)

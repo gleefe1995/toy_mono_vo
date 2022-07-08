@@ -1,8 +1,68 @@
 #pragma once
-#include "KeyFrame.h"
+#include "Frame.h"
 #include <iostream>
+#include <numeric>
+#include <math.h>
 
 namespace Feature{
+
+std::vector<cv::KeyPoint> ssc(std::vector<cv::KeyPoint> keyPoints, int numRetPoints, float tolerance, int cols, int rows);
+void erase_not_tracked_points(Frame::Frame &prev_frame, Frame::Frame &curr_frame, std::vector<uchar> status);
+
+void featureDetection(cv::Mat img, Frame::Frame &curr_Frame, int &keyframe_number)
+{
+
+  // points1_map.clear();
+  // vector <pair<int,Point2f>>().swap(points1_map);
+  // goodFeaturesToTrack(img_1, points1, MAX_CORNERS, 0.01, 10);
+  //  Size winSize = Size( 5, 5 );
+  //  Size zeroZone = Size( -1, -1 );
+  //  TermCriteria criteria = TermCriteria( TermCriteria::EPS + TermCriteria::COUNT, 40, 0.001 );
+  //  cornerSubPix( img_1, points1, winSize, zeroZone, criteria );
+  //***********************************************************************************
+
+  std::vector<cv::KeyPoint> keyPoints;
+  int fast_threshold = 1;
+  bool nonmaxSuppression = true;
+  cv::FAST(img, keyPoints, fast_threshold, nonmaxSuppression);
+  
+  cv::Mat mask;
+
+  //detector->detect(img_1, keyPoints,mask);
+
+  // KeyPoint::convert(keypoints_1, points1, vector<int>());
+  int numRetPoints = 1500; //choose exact number of return points
+  //float percentage = 0.1; //or choose percentage of points to be return
+  //int numRetPoints = (int)keyPoints.size()*percentage;
+
+  float tolerance = 0.1; // tolerance of the number of return points
+
+  //Sorting keypoints by deacreasing order of strength
+  std::vector<float> responseVector;
+  for (unsigned int i = 0; i < keyPoints.size(); i++)
+    responseVector.push_back(keyPoints[i].response);
+  std::vector<int> Indx(responseVector.size());
+  std::iota(std::begin(Indx), std::end(Indx), 0);
+  cv::sortIdx(responseVector, Indx, cv::SORT_DESCENDING);
+  std::vector<cv::KeyPoint> keyPointsSorted;
+  for (unsigned int i = 0; i < keyPoints.size(); i++)
+    keyPointsSorted.push_back(keyPoints[Indx[i]]);
+
+  std::vector<cv::KeyPoint> sscKP = ssc(keyPointsSorted, numRetPoints, tolerance, img.cols, img.rows);
+  
+  curr_Frame.set_points_2d(sscKP, keyframe_number);
+  
+
+  // cv::Ptr<cv::ORB> compute_desc = cv::ORB::create();
+  // cv::Mat descriptor;
+
+  // compute_desc->compute(img,sscKP, descriptor);
+  // curr_Frame.set_tracking_descriptor(descriptor);
+  
+  keyframe_number++;
+}
+
+
 
 std::vector<cv::KeyPoint> ssc(std::vector<cv::KeyPoint> keyPoints, int numRetPoints, float tolerance, int cols, int rows)
 {
@@ -85,65 +145,111 @@ std::vector<cv::KeyPoint> ssc(std::vector<cv::KeyPoint> keyPoints, int numRetPoi
 }
 
 
-void featureDetection(cv::Mat img, std::vector<cv::Point2f> &points, std::vector<std::pair<std::pair<int, int>,cv::Point2f>> &points_with_id, 
-                        int &keyframe_number, int MAX_CORNERS)
+void featureTracking(cv::Mat img_1, cv::Mat img_2, Frame::Frame &prev_frame, Frame::Frame &curr_frame)
 {
 
-  // points1_map.clear();
-  // vector <pair<int,Point2f>>().swap(points1_map);
-  // goodFeaturesToTrack(img_1, points1, MAX_CORNERS, 0.01, 10);
-  //  Size winSize = Size( 5, 5 );
-  //  Size zeroZone = Size( -1, -1 );
-  //  TermCriteria criteria = TermCriteria( TermCriteria::EPS + TermCriteria::COUNT, 40, 0.001 );
-  //  cornerSubPix( img_1, points1, winSize, zeroZone, criteria );
-  //***********************************************************************************
+  //this function automatically gets rid of points for which tracking fails
+  // points2_map.clear();
+  // vector <pair<int,Point2f>>().swap(points2_map);
+  // std::vector<std::pair<int, std::pair<int, cv::Point2f>>> points2_map_tmp;
+  std::vector<float> err;
+  cv::Size winSize = cv::Size(21, 21);
+  cv::TermCriteria termcrit = cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 40, 0.01);
+  std::vector<uchar> status;
 
-  std::vector<cv::KeyPoint> keyPoints;
-  int fast_threshold = 1;
-  bool nonmaxSuppression = true;
-  cv::FAST(img, keyPoints, fast_threshold, nonmaxSuppression);
+  std::vector<cv::Point2f> curr_frame_2d_points;
+
+  cv::calcOpticalFlowPyrLK(img_1, img_2, prev_frame.get_2d_points(), curr_frame_2d_points, status, err, winSize, 3, termcrit, 0, 0.001);
   
-  cv::Mat mask;
+  // std::cout << "befroe tracking prev: " << prev_frame.get_2d_points().size() << "\n";
+  // std::cout << "bf curr: " << curr_frame_2d_points.size() << "\n";
 
-  //detector->detect(img_1, keyPoints,mask);
+  curr_frame.set_points_2d(curr_frame_2d_points);
+  // std::cout << curr_frame_2d_points.size() << "\n";
+  // std::cout << curr_frame.get_2d_points().size() << "\n";
 
-  // KeyPoint::convert(keypoints_1, points1, vector<int>());
-  int numRetPoints = MAX_CORNERS; //choose exact number of return points
-  //float percentage = 0.1; //or choose percentage of points to be return
-  //int numRetPoints = (int)keyPoints.size()*percentage;
+  // for (int i = 0; i < status.size(); i++)
+  //   curr_frame.get_2d_points_with_id().push_back(std::make_pair(std::make_pair(prev_frame.get_2d_points_with_id()[i].first.first, prev_frame.get_2d_points_with_id()[i].first.second), curr_frame.get_2d_points().at(i)));
 
-  float tolerance = 0.1; // tolerance of the number of return points
+  curr_frame.set_points_2d_with_id(prev_frame);
+  // std::cout << curr_frame.get_2d_points_with_id().size() << "\n";
 
-  //Sorting keypoints by deacreasing order of strength
-  std::vector<float> responseVector;
-  for (unsigned int i = 0; i < keyPoints.size(); i++)
-    responseVector.push_back(keyPoints[i].response);
-  std::vector<int> Indx(responseVector.size());
-  std::iota(std::begin(Indx), std::end(Indx), 0);
-  cv::sortIdx(responseVector, Indx, cv::SORT_DESCENDING);
-  std::vector<cv::KeyPoint> keyPointsSorted;
-  for (unsigned int i = 0; i < keyPoints.size(); i++)
-    keyPointsSorted.push_back(keyPoints[Indx[i]]);
-
-  std::vector<cv::KeyPoint> sscKP = ssc(keyPointsSorted, numRetPoints, tolerance, img.cols, img.rows);
   
-  cv::KeyPoint::convert(sscKP, points, std::vector<int>());
-  //cout << "The number of new detected points" << points1.size() << "\n";
 
-  //***********************************************************************************
-  std::vector<std::pair<std::pair<int, int>, cv::Point2f>> points_with_id_tmp;
+  erase_not_tracked_points(prev_frame, curr_frame, status);
 
-  for (int i = 0; i < points.size(); i++)
-  {
-    points_with_id_tmp.push_back(std::make_pair(std::make_pair(keyframe_number, i), points.at(i)));
-  }
-  points_with_id = points_with_id_tmp;
+  //getting rid of points for which the KLT tracking failed or those who have gone outside the frame
+  
+}
 
-  keyframe_number++;
+void erase_not_tracked_points(Frame::Frame &prev_frame, Frame::Frame &curr_frame, std::vector<uchar> status)
+{
+    int indexCorrection = 0;
+    for (int i = 0; i < status.size(); i++)
+    {
+        cv::Point2f pt = curr_frame.get_2d_points().at(i - indexCorrection);
+        if ((status.at(i) == 0) || (pt.x < 0) || (pt.y < 0))
+        {
+            if ((pt.x < 0) || (pt.y < 0))
+            {
+                status.at(i) = 0;
+            }
+
+        prev_frame.erase_points_with_index(i - indexCorrection);
+        curr_frame.erase_points_with_index(i - indexCorrection);
+
+        indexCorrection++;
+        }
+    }
 }
 
 
 
+
+
+void get_pose_from_essential_mat(Frame::Frame &prev_frame, Frame::Frame &curr_frame, cv::Mat intrinsic_param)
+{
+  cv::Mat R, t, E, mask;
+
+  double focal = intrinsic_param.at<double>(0,0);
+  cv::Point2d pp(intrinsic_param.at<double>(2,0), intrinsic_param.at<double>(2,1));
+
+
+  E = findEssentialMat(curr_frame.get_2d_points(), prev_frame.get_2d_points(), focal, pp, cv::RANSAC, 0.999, 1.0, mask);
+  recoverPose(E, curr_frame.get_2d_points(), prev_frame.get_2d_points(), R, t, focal, pp, mask);
+
+  curr_frame.set_camera_pose(prev_frame, R, t);
+
+}
+
+
+void vis_frame_2d_points(Frame::Frame &frame, cv::Mat image_c,bool stop)
+{
+  const float r = 5;
+    for (int i=0;i<frame.get_2d_points().size();++i)
+    {
+        cv::Point2f pt1,pt2;
+        // prev_frame.get_2d_points()[i].x
+        pt1.x=frame.get_2d_points()[i].x-r;
+        pt1.y=frame.get_2d_points()[i].y-r;
+        pt2.x=frame.get_2d_points()[i].x+r;
+        pt2.y=frame.get_2d_points()[i].y+r;
+
+        cv::rectangle(image_c,pt1,pt2,cv::Scalar(0,255,0));
+        cv::circle(image_c,frame.get_2d_points()[i],2,cv::Scalar(0,255,0),-1);
+    }
+    if (stop==true)
+    {
+      cv::imshow("image1_c", image_c);
+      cv::waitKey();
+    }
+    else
+    {
+      cv::imshow("image1_c", image_c);
+      cv::waitKey(1);
+    }
+
+}
 
 
 

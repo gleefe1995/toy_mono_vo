@@ -3,7 +3,7 @@
 
 CMakeFiles/classtest.dir/main.cpp.o: ../main.cpp \
   /usr/include/stdc-predef.h \
-  ../include/KeyFrame.h \
+  ../include/Frame.h \
   /usr/include/c++/7/vector \
   /usr/include/c++/7/bits/stl_algobase.h \
   /usr/include/x86_64-linux-gnu/c++/7/bits/c++config.h \
@@ -411,7 +411,10 @@ CMakeFiles/classtest.dir/main.cpp.o: ../main.cpp \
   /usr/include/opencv2/viz/viz3d.hpp \
   /usr/include/opencv2/viz/vizcore.hpp \
   /usr/include/opencv2/highgui/highgui.hpp \
-  ../include/initialize.h
+  ../include/initialize.h \
+  ../include/Feature.h \
+  /usr/include/c++/7/numeric \
+  /usr/include/c++/7/bits/stl_numeric.h
 
 
 /usr/include/opencv2/highgui/highgui.hpp:
@@ -652,6 +655,8 @@ CMakeFiles/classtest.dir/main.cpp.o: ../main.cpp \
 
 /usr/include/x86_64-linux-gnu/bits/sysmacros.h:
 
+/usr/include/c++/7/numeric:
+
 /usr/include/c++/7/cerrno:
 
 /usr/include/x86_64-linux-gnu/bits/fp-logb.h:
@@ -732,15 +737,19 @@ CMakeFiles/classtest.dir/main.cpp.o: ../main.cpp \
 
 /usr/include/c++/7/ext/numeric_traits.h:
 
-/usr/include/c++/7/bits/allocator.h:
-
-../include/KeyFrame.h:
-
 /usr/include/opencv2/stitching/detail/camera.hpp:
 
 /usr/include/c++/7/bits/stl_pair.h:
 
 /usr/include/c++/7/bits/node_handle.h:
+
+/usr/include/c++/7/bits/cpp_type_traits.h:
+
+/usr/include/x86_64-linux-gnu/bits/setjmp.h:
+
+/usr/lib/gcc/x86_64-linux-gnu/7/include/stdarg.h:
+
+/usr/include/x86_64-linux-gnu/bits/types/mbstate_t.h:
 
 /usr/include/wctype.h:
 
@@ -754,6 +763,8 @@ CMakeFiles/classtest.dir/main.cpp.o: ../main.cpp \
 
 /usr/include/x86_64-linux-gnu/bits/types/struct_timeval.h:
 
+/usr/include/c++/7/bits/stl_numeric.h:
+
 /usr/include/x86_64-linux-gnu/bits/types/FILE.h:
 
 /usr/include/c++/7/limits:
@@ -766,6 +777,10 @@ CMakeFiles/classtest.dir/main.cpp.o: ../main.cpp \
 
 /usr/include/x86_64-linux-gnu/bits/typesizes.h:
 
+/usr/include/c++/7/bits/allocator.h:
+
+../include/Frame.h:
+
 /usr/include/x86_64-linux-gnu/bits/types/__FILE.h:
 
 /usr/include/x86_64-linux-gnu/bits/wordsize.h:
@@ -775,14 +790,6 @@ CMakeFiles/classtest.dir/main.cpp.o: ../main.cpp \
 /usr/include/opencv2/videoio.hpp:
 
 /usr/include/x86_64-linux-gnu/sys/cdefs.h:
-
-/usr/include/c++/7/bits/cpp_type_traits.h:
-
-/usr/include/x86_64-linux-gnu/bits/setjmp.h:
-
-/usr/lib/gcc/x86_64-linux-gnu/7/include/stdarg.h:
-
-/usr/include/x86_64-linux-gnu/bits/types/mbstate_t.h:
 
 /usr/include/stdc-predef.h:
 
@@ -1169,6 +1176,8 @@ CMakeFiles/classtest.dir/main.cpp.o: ../main.cpp \
 /usr/include/c++/7/bits/codecvt.h:
 
 /usr/include/c++/7/bits/stl_set.h:
+
+../include/Feature.h:
 
 /usr/include/c++/7/ext/alloc_traits.h:
 

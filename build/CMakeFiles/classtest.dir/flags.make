@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/c++
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/home/gleefe/toy_mono_vo/include -isystem /usr/include/opencv
+CXX_INCLUDES = -I/home/gleefe/toy_mono_vo/include -isystem /usr/include/eigen3 -isystem /usr/include/opencv
 
 CXX_FLAGS = -std=gnu++1z
 
