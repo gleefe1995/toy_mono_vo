@@ -20,10 +20,9 @@ private:
     std::vector<point_3d_pair> points_3d_with_id_;
     std::vector<point_2d_pair> points_2d_with_id_;
     std::vector<cv::Point2f> points_2d_;
+    std::vector<cv::Point2f> tracking_points_2d;
     // std::vector<point_2d_pair> triangulate_points_2d_with_id_;
-
-
-    cv::Mat tracking_descriptor_;
+    cv::Mat descriptor_;
 
     int number_of_3d_points_;
     int frame_num_;
@@ -44,6 +43,10 @@ public:
     void set_points_2d(std::vector<cv::KeyPoint> sscKP, const int frame_number)
     {
         frame_num_ = frame_number;
+
+        points_2d_.clear();
+        points_2d_with_id_.clear();
+
         cv::KeyPoint::convert(sscKP, points_2d_, std::vector<int>());
 
         for (int i = 0; i < points_2d_.size(); i++)
@@ -52,16 +55,43 @@ public:
         // triangulate_points_2d_with_id_ = points_2d_with_id_;
     }
 
-    void set_points_2d(std::vector<cv::Point2f> tracked_points)
+    void set_points_2d(std::vector<cv::Point2f> detected_points)
     {
-        points_2d_ = tracked_points;
+        points_2d_.clear();
+        points_2d_ = detected_points;
+    }
+
+    void set_good_points_2d(std::vector<cv::Point2f> tracked_points)
+    {
+        tracking_points_2d.clear();
+        tracking_points_2d = tracked_points;
+    }
+
+    std::vector<cv::Point2f> get_good_points_2d()
+    {
+        return tracking_points_2d;
+    }
+
+
+    void set_descriptors(cv::Mat descriptors)
+    {
+        descriptor_ = descriptors.clone();
     }
 
     void set_points_2d_with_id(Frame prev_frame)
     {
+        points_2d_with_id_.clear();
         for (int i=0; i<points_2d_.size();++i)
             points_2d_with_id_.push_back(std::make_pair(std::make_pair(prev_frame.get_2d_points_with_id()[i].first.first, prev_frame.get_2d_points_with_id()[i].first.second), points_2d_.at(i)));
     }
+
+    void set_points_2d_with_id(const int keyframe_number)
+    {
+        points_2d_with_id_.clear();
+        for (int i = 0; i < points_2d_.size(); i++)
+            points_2d_with_id_.push_back(std::make_pair(std::make_pair(keyframe_number, i), points_2d_.at(i)));
+    }
+
 
     void erase_points_with_index(int i)
     {
@@ -82,15 +112,12 @@ public:
         R = rot;
     }
 
-    void set_tracking_descriptor(cv::Mat desc)
-    {
-        tracking_descriptor_ = desc;
-    }
 
     cv::Mat get_desc()
     {
-        return tracking_descriptor_;
+        return descriptor_;
     }
+
 
     cv::Mat get_rotation_mat()
     {
@@ -151,7 +178,7 @@ public:
         this->points_2d_with_id_ = curr_frame.get_2d_points_with_id();
         this->R = curr_frame.get_rotation_mat();
         this->t = curr_frame.get_translation_mat();
-        
+        this->descriptor_ = curr_frame.get_desc();
 
     }
     

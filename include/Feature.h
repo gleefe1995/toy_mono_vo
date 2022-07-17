@@ -4,7 +4,118 @@
 #include <numeric>
 #include <math.h>
 
+#include <torch/torch.h>
+#include <opencv2/opencv.hpp>
+
+#include <args.hxx>
+#include "image_loader.hpp"
+#include "alike.hpp"
+#include "simple_tracker.hpp"
+#include "utils.h"
+
+
+
 namespace Feature{
+
+
+
+
+void ALIKE_feature_detection(cv::Mat img, Frame::Frame &curr_frame, int &keyframe_number, alike::ALIKE &alike, bool use_cuda ,bool is_keyframe=true)
+{
+  torch::Tensor score_map, descriptor_map;
+  torch::Tensor keypoints_t, dispersitys_t, kptscores_t, descriptors_t;
+  std::vector<cv::Point2f> keypoints;
+  cv::Mat descriptors;
+  auto device = (use_cuda) ? torch::kCUDA : torch::kCPU;
+
+  auto img_tensor = alike::mat2Tensor(img).permute({2, 0, 1}).unsqueeze(0).to(device).to(torch::kFloat) / 255;
+
+  alike.extract(img_tensor, score_map, descriptor_map);
+  alike.detectAndCompute(score_map, descriptor_map, keypoints_t, dispersitys_t, kptscores_t, descriptors_t);
+  alike.toOpenCVFormat(keypoints_t, dispersitys_t, kptscores_t, descriptors_t, keypoints, descriptors);
+
+  curr_frame.set_points_2d(keypoints);
+  curr_frame.set_descriptors(descriptors);
+
+  if (is_keyframe==true)
+    curr_frame.set_points_2d_with_id(keyframe_number);
+
+  keyframe_number++;
+
+}
+
+
+
+int ALIKE_feature_tracking(cv::Mat img, Frame::Frame &prev_frame, Frame::Frame &curr_frame)
+{
+  float mMth = 0.7;
+  int N_matches;
+  cv::FlannBasedMatcher matcher;
+  std::vector<std::vector<cv::DMatch>> knn_matches;
+
+
+  matcher.knnMatch(prev_frame.get_desc(), curr_frame.get_desc(), knn_matches, 2);
+
+  // int channel = prev_frame.get_desc().cols;
+
+  // std::cout << prev_frame.get_desc().rows << "\n"; // M
+  // std::cout << prev_frame.get_desc().cols << "\n"; // 64
+
+  std::vector<cv::DMatch> good_matches;
+  for (auto i = 0; i < knn_matches.size(); i++)
+  {
+      if (knn_matches[i][0].distance < mMth * knn_matches[i][1].distance)
+      {
+          good_matches.push_back(knn_matches[i][0]);
+      }
+  }
+
+  N_matches = good_matches.size();
+
+  std::vector<cv::Point2f> prev_points;
+  std::vector<cv::Point2f> curr_points;
+
+  // cv::Mat prev_desc_slice(cv::Size(channel, N_matches), CV_32FC1);
+  // cv::Mat curr_desc_slice(cv::Size(channel, N_matches), CV_32FC1);
+
+  for (int i=0; i < N_matches; ++i)
+  {
+    auto match = good_matches[i];
+    auto p1 = prev_frame.get_2d_points()[match.queryIdx];
+    auto p2 = curr_frame.get_2d_points()[match.trainIdx];
+
+    // prev_desc_slice.row(i) = prev_frame.get_desc().row(match.queryIdx);
+    // curr_desc_slice.row(i) = curr_frame.get_desc().row(match.trainIdx);
+
+    prev_points.push_back(p1);
+    curr_points.push_back(p2);
+
+    cv::line(img, p1, p2, cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
+    cv::circle(img, p2, 1, cv::Scalar(0, 0, 255), -1, cv::LINE_AA);
+  }
+
+
+  prev_frame.set_good_points_2d(prev_points);
+  curr_frame.set_good_points_2d(curr_points);
+  // prev_frame.set_descriptors(curr_frame.get_desc());
+  // curr_frame.set_descriptors(curr_desc_slice);
+  
+  // std::cout << prev_frame.get_2d_points().size() << "\n";
+  // std::cout << prev_frame.get_desc().size() << "\n";
+  // std::cout << curr_frame.get_2d_points().size() << "\n";
+  // std::cout << curr_frame.get_desc().size() << "\n";
+
+  // std::cout << "prev size: " << prev_points.size() << " / prev_desc_size: " << prev_desc_slice.size() << "\n";
+  // std::cout << "curr size: " << curr_points.size() << " / curr_desc_size: " << curr_desc_slice.size() << "\n";
+
+  // cv::waitKey();
+
+
+  return N_matches;
+
+}
+
+
 
 std::vector<cv::KeyPoint> ssc(std::vector<cv::KeyPoint> keyPoints, int numRetPoints, float tolerance, int cols, int rows);
 void erase_not_tracked_points(Frame::Frame &prev_frame, Frame::Frame &curr_frame, std::vector<uchar> status);
@@ -191,9 +302,7 @@ void erase_not_tracked_points(Frame::Frame &prev_frame, Frame::Frame &curr_frame
         if ((status.at(i) == 0) || (pt.x < 0) || (pt.y < 0))
         {
             if ((pt.x < 0) || (pt.y < 0))
-            {
                 status.at(i) = 0;
-            }
 
         prev_frame.erase_points_with_index(i - indexCorrection);
         curr_frame.erase_points_with_index(i - indexCorrection);
@@ -207,16 +316,23 @@ void erase_not_tracked_points(Frame::Frame &prev_frame, Frame::Frame &curr_frame
 
 
 
-void get_pose_from_essential_mat(Frame::Frame &prev_frame, Frame::Frame &curr_frame, cv::Mat intrinsic_param)
+void get_pose_from_essential_mat(Frame::Frame &prev_frame, Frame::Frame &curr_frame, const cv::Mat intrinsic_param)
 {
   cv::Mat R, t, E, mask;
 
   double focal = intrinsic_param.at<double>(0,0);
-  cv::Point2d pp(intrinsic_param.at<double>(2,0), intrinsic_param.at<double>(2,1));
+  cv::Point2d pp(intrinsic_param.at<double>(0,2), intrinsic_param.at<double>(1,2));
+
+  // std::cout << curr_frame.get_2d_points().size() << "\n";
+  // std::cout << prev_frame.get_2d_points().size() << "\n";
 
 
-  E = findEssentialMat(curr_frame.get_2d_points(), prev_frame.get_2d_points(), focal, pp, cv::RANSAC, 0.999, 1.0, mask);
-  recoverPose(E, curr_frame.get_2d_points(), prev_frame.get_2d_points(), R, t, focal, pp, mask);
+  E = findEssentialMat(curr_frame.get_good_points_2d(), prev_frame.get_good_points_2d(), focal, pp, cv::RANSAC, 0.999, 1.0, mask);
+  recoverPose(E, curr_frame.get_good_points_2d(), prev_frame.get_good_points_2d(), R, t, focal, pp, mask);
+
+  // std::cout << prev_frame.get_rotation_mat().type() << "\n";
+  // std::cout << R.type() << "\n";
+
 
   curr_frame.set_camera_pose(prev_frame, R, t);
 
