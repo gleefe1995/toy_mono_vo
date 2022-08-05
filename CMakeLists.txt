@@ -25,14 +25,16 @@ set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Wno-deprecated-gpu-targets")
 
 
 find_package(OpenCV REQUIRED)
-find_package(Eigen3 3.1.0 REQUIRED)
+# find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
+find_package(Ceres REQUIRED)
 
 include_directories(
     include
     ${Opencv_INCLUDE_DIRS}
-    ${EIGEN3_INCLUDE_DIR}
+    # ${EIGEN3_INCLUDE_DIR}
     ${Pangolin_INCLUDE_DIRS}
+    ${CERES_INCLUDE_DIRS}
 )
 # Only Ceres itself should be compiled with CERES_BUILDING_SHARED_LIBRARY
 # defined, any users of Ceres will have CERES_USING_SHARED_LIBRARY defined
@@ -47,5 +49,7 @@ target_link_libraries(get_patches get_patches_cuda)
 add_executable(classtest 
                 src/main.cpp
                 src/utils.cpp)
-target_link_libraries(classtest ${TORCH_LIBRARIES} ${OpenCV_LIBS} ${EIGEN3_LIBS} ${Pangolin_LIBRARIES} get_patches)
+target_link_libraries(classtest ${TORCH_LIBRARIES} ${OpenCV_LIBS} ${Pangolin_LIBRARIES} ${CERES_LIBRARIES} get_patches)
+
+# ${EIGEN3_LIBS}
 

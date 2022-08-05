@@ -20,7 +20,7 @@ namespace Feature{
 
 
 
-void ALIKE_feature_detection(cv::Mat img, Frame::Frame &curr_frame, int &keyframe_number, alike::ALIKE &alike, bool use_cuda ,bool is_keyframe=true)
+void ALIKE_feature_detection(cv::Mat &img, Frame::Frame &curr_frame, alike::ALIKE &alike, bool use_cuda ,bool is_keyframe)
 {
   torch::Tensor score_map, descriptor_map;
   torch::Tensor keypoints_t, dispersitys_t, kptscores_t, descriptors_t;
@@ -34,32 +34,27 @@ void ALIKE_feature_detection(cv::Mat img, Frame::Frame &curr_frame, int &keyfram
   alike.detectAndCompute(score_map, descriptor_map, keypoints_t, dispersitys_t, kptscores_t, descriptors_t);
   alike.toOpenCVFormat(keypoints_t, dispersitys_t, kptscores_t, descriptors_t, keypoints, descriptors);
 
-  curr_frame.set_points_2d(keypoints);
+  // curr_frame.set_points_2d(keypoints);
+  curr_frame.set_good_points_2d(keypoints);
   curr_frame.set_descriptors(descriptors);
-
-  if (is_keyframe==true)
-    curr_frame.set_points_2d_with_id(keyframe_number);
-
-  keyframe_number++;
 
 }
 
 
 
-int ALIKE_feature_tracking(cv::Mat img, Frame::Frame &prev_frame, Frame::Frame &curr_frame)
+int ALIKE_feature_tracking(cv::Mat &img, Frame::Frame &prev_frame, Frame::Frame &curr_frame, Frame::Frame &prev_keyframe)
 {
   float mMth = 0.7;
   int N_matches;
   cv::FlannBasedMatcher matcher;
   std::vector<std::vector<cv::DMatch>> knn_matches;
 
-
   matcher.knnMatch(prev_frame.get_desc(), curr_frame.get_desc(), knn_matches, 2);
 
-  // int channel = prev_frame.get_desc().cols;
+  // std::cout << prev_frame.get_good_points_2d().size() << "\n";
 
-  // std::cout << prev_frame.get_desc().rows << "\n"; // M
-  // std::cout << prev_frame.get_desc().cols << "\n"; // 64
+
+  int channel = prev_frame.get_desc().cols;
 
   std::vector<cv::DMatch> good_matches;
   for (auto i = 0; i < knn_matches.size(); i++)
@@ -74,46 +69,164 @@ int ALIKE_feature_tracking(cv::Mat img, Frame::Frame &prev_frame, Frame::Frame &
 
   std::vector<cv::Point2f> prev_points;
   std::vector<cv::Point2f> curr_points;
+  std::vector<cv::Point2f> keyframe_triangulate_points;
+  std::vector<Frame::point_2d_pair> prev_2d_points_with_id;
+  std::vector<Frame::point_2d_pair> prev_keyframe_2d_points_with_id;
+  // std::vector<Frame::point_2d_pair> curr_frame_2d_points_with_id;
 
-  // cv::Mat prev_desc_slice(cv::Size(channel, N_matches), CV_32FC1);
-  // cv::Mat curr_desc_slice(cv::Size(channel, N_matches), CV_32FC1);
+  cv::Mat prev_desc_slice(0, N_matches, CV_32FC1);
+  cv::Mat curr_desc_slice(0, N_matches, CV_32FC1);
+
+  // std::cout << curr_frame.get_good_points_2d().size() << "\n";
+  // std::cout << prev_keyframe.get_good_points_2d().size() << "\n";
+  // std::cout << prev_keyframe.get_2d_points_with_id().size() << "\n";
+
+  // std::cout << "Tracking" << "\n";
+  // std::cout << prev_frame.get_2d_points_with_id().size() << "\n";
 
   for (int i=0; i < N_matches; ++i)
   {
     auto match = good_matches[i];
-    auto p1 = prev_frame.get_2d_points()[match.queryIdx];
-    auto p2 = curr_frame.get_2d_points()[match.trainIdx];
+    auto p1 = prev_frame.get_good_points_2d()[match.queryIdx];
+    auto p2 = curr_frame.get_good_points_2d()[match.trainIdx];
+    auto p3 = prev_keyframe.get_good_points_2d()[match.queryIdx];
 
-    // prev_desc_slice.row(i) = prev_frame.get_desc().row(match.queryIdx);
-    // curr_desc_slice.row(i) = curr_frame.get_desc().row(match.trainIdx);
+    auto p4 = prev_keyframe.get_2d_points_with_id()[match.queryIdx];
+    auto p5 = prev_frame.get_2d_points_with_id()[match.queryIdx];
+
+    prev_desc_slice.push_back(prev_frame.get_desc().row(match.queryIdx));
+    curr_desc_slice.push_back(curr_frame.get_desc().row(match.trainIdx));
 
     prev_points.push_back(p1);
     curr_points.push_back(p2);
-
-    cv::line(img, p1, p2, cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
-    cv::circle(img, p2, 1, cv::Scalar(0, 0, 255), -1, cv::LINE_AA);
+    keyframe_triangulate_points.push_back(p3);
+    prev_keyframe_2d_points_with_id.push_back(p4);
+    prev_2d_points_with_id.push_back(p5);
+    
+    // cv::line(img, p1, p2, cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
+    // cv::circle(img, p1, 1, cv::Scalar(255, 0, 0), -1, cv::LINE_AA);
+    // cv::circle(img, p2, 1, cv::Scalar(0, 0, 255), -1, cv::LINE_AA);
   }
+  // cv::imshow("make 3d points", img);
+  
 
 
   prev_frame.set_good_points_2d(prev_points);
   curr_frame.set_good_points_2d(curr_points);
-  // prev_frame.set_descriptors(curr_frame.get_desc());
-  // curr_frame.set_descriptors(curr_desc_slice);
+  prev_keyframe.set_good_points_2d(keyframe_triangulate_points);
   
-  // std::cout << prev_frame.get_2d_points().size() << "\n";
-  // std::cout << prev_frame.get_desc().size() << "\n";
-  // std::cout << curr_frame.get_2d_points().size() << "\n";
-  // std::cout << curr_frame.get_desc().size() << "\n";
+  prev_frame.set_descriptors(prev_desc_slice);
+  curr_frame.set_descriptors(curr_desc_slice);
 
-  // std::cout << "prev size: " << prev_points.size() << " / prev_desc_size: " << prev_desc_slice.size() << "\n";
-  // std::cout << "curr size: " << curr_points.size() << " / curr_desc_size: " << curr_desc_slice.size() << "\n";
-
-  // cv::waitKey();
-
-
+  prev_frame.set_points_2d_with_id(prev_2d_points_with_id);
+  curr_frame.set_points_2d_with_id(prev_frame);
+  prev_keyframe.set_points_2d_with_id(prev_keyframe_2d_points_with_id);
+  
   return N_matches;
 
 }
+
+void make_3d_points(cv::Mat &curr_image, Frame::Frame &prev_keyframe, Frame::Frame &curr_frame, const cv::Mat &intrinsic_param)
+{
+  cv::Mat Rt0 = cv::Mat::eye(3, 4, CV_64FC1);
+  cv::Mat Rt1 = cv::Mat::eye(3, 4, CV_64FC1);
+  
+  cv::Mat prevRotProj = prev_keyframe.get_rotation_mat().t();
+  cv::Mat prevTransProj = -prevRotProj*prev_keyframe.get_translation_mat();
+
+  cv::Mat currRotProj = curr_frame.get_rotation_mat().t();
+  cv::Mat currTransProj = -currRotProj*curr_frame.get_translation_mat();
+
+  prevRotProj.copyTo(Rt0.rowRange(0,3).colRange(0,3));
+  prevTransProj.copyTo(Rt0.rowRange(0,3).col(3));
+  
+  currRotProj.copyTo(Rt1.rowRange(0,3).colRange(0,3));
+  currTransProj.copyTo(Rt1.rowRange(0,3).col(3));
+
+  // std::cout << Rt0 << "\n";
+  // std::cout << Rt1 << "\n";
+
+
+
+  cv::Mat points_3d_homo;
+
+  cv::triangulatePoints(intrinsic_param*Rt0,intrinsic_param*Rt1,prev_keyframe.get_good_points_2d(),curr_frame.get_good_points_2d(),points_3d_homo);
+
+  std::vector<cv::Point2f> curr_points;
+  std::vector<Frame::point_2d_pair> curr_points_2d_with_id;
+  std::vector<Frame::point_3d_pair> curr_points_3d_with_id;
+  std::vector<Frame::point_2d_pair> prev_keyframe_points_2d_with_id;
+  
+  // cv::Mat prev_desc_slice(0, N_matches, CV_32FC1);
+  cv::Mat curr_desc_slice(0, points_3d_homo.cols, CV_32FC1);
+
+  for(int i = 0; i < points_3d_homo.cols; i++)
+  {
+    int m = curr_frame.get_good_points_2d()[i].x;
+    int n = curr_frame.get_good_points_2d()[i].y;
+    // cv::circle(curr_image, cv::Point(m, n) ,1, CV_RGB(255,0,0), 2);
+
+    
+    cv::Mat point_3d_homo = points_3d_homo.col(i); 
+    point_3d_homo /= point_3d_homo.at<float>(3);
+    point_3d_homo.convertTo(point_3d_homo, CV_64F);
+    
+    cv::Mat three_to_p=intrinsic_param*Rt1*point_3d_homo;
+
+
+    int c = int(three_to_p.at<double>(0) / three_to_p.at<double>(2));
+    int d = int(three_to_p.at<double>(1) / three_to_p.at<double>(2));
+    
+    // cv::circle(curr_image, cv::Point(c,d),2,CV_RGB(0,0,255),-1);
+
+    int point_diff_x = (m-c)*(m-c);
+    int point_diff_y = (n-d)*(n-d);
+    int reprojectionError = 10;
+
+    
+    float x_para2=curr_frame.get_good_points_2d()[i].x-prev_keyframe.get_good_points_2d()[i].x;
+    float y_para2=curr_frame.get_good_points_2d()[i].y-prev_keyframe.get_good_points_2d()[i].y;
+
+    float parallax2=std::sqrt(x_para2*x_para2+y_para2*y_para2);
+
+    if((c>0)&&(d>0)&&(c<curr_image.cols)&&(d<curr_image.rows)&&(sqrt(point_diff_x+point_diff_y)<reprojectionError)
+        &&(parallax2>10))
+    {
+      cv::circle(curr_image, cv::Point(c,d),2,CV_RGB(0,255,255),-1);
+
+      auto p1 = prev_keyframe.get_2d_points_with_id()[i];
+      auto p2 = curr_frame.get_good_points_2d()[i];
+      // auto p3 = curr_frame.get_2d_points_with_id()[i];
+
+      // prev_desc_slice.push_back(prev_frame.get_desc().row(i));
+      curr_desc_slice.push_back(curr_frame.get_desc().row(i));
+      
+      curr_points.push_back(p2);
+      prev_keyframe_points_2d_with_id.push_back(p1);
+      curr_points_2d_with_id.push_back(std::make_pair(p1.first, p2));
+      // std::cout << p1.first << " " << p3.first << "\n";
+      // std::cout << p2 << " " << p3.second << "\n";
+      curr_points_3d_with_id.push_back(std::make_pair(p1.first, cv::Point3d(point_3d_homo.at<double>(0),point_3d_homo.at<double>(1),point_3d_homo.at<double>(2))));
+
+    }
+
+  }
+  // cv::waitKey();
+  // std::cout << curr_desc_slice.size() << "\n";
+
+  curr_frame.set_good_points_2d(curr_points);
+  curr_frame.set_points_2d_with_id(curr_points_2d_with_id);
+  curr_frame.set_points_3d_with_id(curr_points_3d_with_id);
+  prev_keyframe.set_points_3d_with_id(curr_points_3d_with_id);
+  prev_keyframe.set_points_2d_with_id(prev_keyframe_points_2d_with_id);
+  // prev_frame.set_descriptors(prev_desc_slice);
+  curr_frame.set_descriptors(curr_desc_slice);
+  
+  // cv::imshow("3d_points", curr_image);
+  // cv::waitKey();
+}
+
+
 
 
 
@@ -316,7 +429,7 @@ void erase_not_tracked_points(Frame::Frame &prev_frame, Frame::Frame &curr_frame
 
 
 
-void get_pose_from_essential_mat(Frame::Frame &prev_frame, Frame::Frame &curr_frame, const cv::Mat intrinsic_param)
+void get_pose_from_essential_mat(Frame::Frame &prev_frame, Frame::Frame &curr_frame, const cv::Mat &intrinsic_param)
 {
   cv::Mat R, t, E, mask;
 

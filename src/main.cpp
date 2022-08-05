@@ -1,6 +1,10 @@
 #include "Frame.h"
 #include "initialize.h"
 #include "Feature.h"
+#include "local_mapping.h"
+#include "Viewer.h"
+#include "loadfile.h"
+#include "map_database.h"
 
 #include <chrono>
 #include <torch/torch.h>
@@ -14,10 +18,12 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <thread>
 
 using std::stringstream;
 
 using namespace alike;
+
 
 
 int main(int argc, char **argv)
@@ -107,10 +113,17 @@ int main(int argc, char **argv)
     std::cout << "=======================" << std::endl;
 
     auto loader = ImageLoader(file_path);
+    
     auto alike = ALIKE(model_path, use_cuda, 2, top_k, scores_th, n_limit, !no_subpixel);
 
     std::string scene_num = file_path.substr(file_path.length()-10,2);
+    std::string path_to_pose = "/home/gleefe/Downloads/dataset/poses/" + scene_num + ".txt";
     cv::Mat intrinsic_param = initialize::get_intrinsic_mat(scene_num);
+    
+    std::vector<cv::Point3d> gt_pose_vec;
+    std::vector<cv::Point3d> curr_gt_pose_vec;
+    gt_pose_vec = loadfile::get_gt(path_to_pose);
+
     // ===============> main loop
     cv::Mat image;
     auto device = (use_cuda) ? torch::kCUDA : torch::kCPU;
@@ -118,9 +131,14 @@ int main(int argc, char **argv)
     Frame::Frame prev_frame;
     Frame::Frame curr_frame;
 
+    Frame::Frame detect_prev_frame;
+    // Frame::Frame detect_curr_frame;
+
     cv::Mat mat_identity=cv::Mat::eye(cv::Size(3,3),CV_64FC1);
     cv::Mat zero_trans = cv::Mat(3,1, CV_64FC1, 0.0);
-    curr_frame.set_camera_pose(mat_identity, zero_trans);
+    cv::Mat rvec, tvec;
+    cv::Rodrigues(mat_identity, rvec);
+    curr_frame.set_camera_pose(rvec, zero_trans);
 
     int keyframe_num = 0;
     cv::Mat prev_image;
@@ -129,44 +147,103 @@ int main(int argc, char **argv)
     int frame_num = 0;
 
     cv::namedWindow("win");
-    cv::Mat traj = cv::Mat::zeros(600, 800, CV_8UC3);
-
     bool init = false;
+    bool is_keyframe = false;
+    // std::vector<Frame::Frame> keyframe_vec;
+    Frame::Frame prev_keyframe;
+    map_database::map_database map_data;
+    
+    std::vector<cv::Point3d> our_traj;
+    our_traj.push_back(cv::Point3d(0.0,0.0,0.0));
+
+    alike::Viewer mpViewer;
+    mpViewer.init();
+    float mViewpointX = 0;
+    float mViewpointY = -200;
+    float mViewpointZ = -0.1;
+    float mViewpointF = 100;
+    pangolin::OpenGlRenderState s_cam(
+    pangolin::ProjectionMatrix(1024,768,mViewpointF,mViewpointF,512,389,0.1,1000),
+    pangolin::ModelViewLookAt(mViewpointX,mViewpointY,mViewpointZ, 0,0,0,0.0,-1.0, 0.0)
+    );
+
+    // Add named OpenGL viewport to window and provide 3D Handler
+    pangolin::View& d_cam = pangolin::CreateDisplay()
+            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f/768.0f)
+            .SetHandler(new pangolin::Handler3D(s_cam));
 
     while (loader.read_next(image, max_size))
     {
         curr_image = image.clone();
         int N_matches;
+        double pnp_inlier_ratio=0;
         
         if (init==false)
         {
             initialize::initialize_from_essential_mat(curr_image, prev_frame, curr_frame, intrinsic_param, alike,
-                                    N_matches, frame_num, keyframe_num, use_cuda);
+                                    N_matches, frame_num, keyframe_num, use_cuda, is_keyframe, prev_keyframe, detect_prev_frame, 
+                                    init, map_data);
         }
-        
-
-        
-
+        else
+        {
+            local_mapping::system(curr_image, prev_frame, curr_frame, alike, use_cuda, is_keyframe, N_matches,
+            keyframe_num, frame_num, pnp_inlier_ratio, intrinsic_param, 
+            detect_prev_frame, prev_keyframe, map_data);
+        }
 
         stringstream fmt;
-        double tracking_ratio = N_matches / (double)curr_frame.get_2d_points().size();
-        fmt << "Keypoints/Matches: " << curr_frame.get_2d_points().size() << "/" << N_matches << " , tracking ratio : " << tracking_ratio*100 << "%" ;
+        fmt << "Frame: " << frame_num << " Keypoints/Matches: " << curr_frame.get_good_points_2d().size() << "/" << N_matches << " ,inlier ratio : " << pnp_inlier_ratio*100 << "% ";
         std::string status = fmt.str();
 
         if (!no_display)
         {   
-            int x = 300;
-            int y = 400;
-            if (frame_num>0)
+            if (is_keyframe)
             {
-                x += int(curr_frame.get_translation_mat().at<double>(0));
-                y += -int(curr_frame.get_translation_mat().at<double>(2));
+                cv::Point3d point_traj(cv::Point3d(curr_frame.get_translation_mat().at<double>(0), curr_frame.get_translation_mat().at<double>(1), curr_frame.get_translation_mat().at<double>(2)));
+                // std::cout << "Current t: " << point_traj.x <<" "<< point_traj.y << " " <<point_traj.z << "\n";
+                our_traj.push_back(point_traj);
+                
+                //traj update
+                int local_ba_vec_size = map_data.get_local_ba_rvec().size();
+                for (int i=0;i<local_ba_vec_size;++i)
+                {
+                    our_traj.pop_back();
+                }
+
+                for (int i=0;i<local_ba_vec_size;++i)
+                {
+                    cv::Mat R,t, R_inv;
+                    cv::Mat rvec_tmp(3,1, CV_64FC1, 0.0);
+                    cv::Mat tvec_tmp(3,1, CV_64FC1, 0.0);
+                    rvec_tmp.at<double>(0) = map_data.get_local_ba_rvec()[i].x;
+                    rvec_tmp.at<double>(1) = map_data.get_local_ba_rvec()[i].y;
+                    rvec_tmp.at<double>(2) = map_data.get_local_ba_rvec()[i].z;
+                    
+                    tvec_tmp.at<double>(0) = map_data.get_local_ba_tvec()[i].x;
+                    tvec_tmp.at<double>(1) = map_data.get_local_ba_tvec()[i].y;
+                    tvec_tmp.at<double>(2) = map_data.get_local_ba_tvec()[i].z;
+                    cv::Rodrigues(rvec_tmp, R);
+                    R_inv = R.t();
+                    t = -R_inv * tvec_tmp;
+                    
+                    our_traj.push_back(cv::Point3d(t.at<double>(0), t.at<double>(1), t.at<double>(2)));
+                }
+
             
+
+            // std::cout << our_traj.size() << "\n";
+
+                curr_gt_pose_vec.push_back(gt_pose_vec[frame_num]);
+                is_keyframe=false;
             }
+            
 
-            cv::circle(traj, cv::Point(x, y) ,1, CV_RGB(255,0,0), 2);
-            cv::imshow("traj", traj);
-
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            d_cam.Activate(s_cam);
+            glClearColor(0.0f,0.0f,0.0f,1.0f);
+            mpViewer.draw_points(our_traj, curr_gt_pose_vec, curr_frame.get_3d_points_with_id());
+            pangolin::FinishFrame();
+            // std::thread mptViewer = std::thread(&Viewer::Run, &mpViewer);
             cv::setWindowTitle("win", status);
             cv::imshow("win", curr_image);
             auto c = cv::waitKey(1);
@@ -174,74 +251,11 @@ int main(int argc, char **argv)
         }
 
         prev_image = curr_image.clone();
-        prev_frame = curr_frame;
-        frame_num++;
+        
+        
+
     }
     
-
-    
-
-    
-
-    
-
-    // Feature::featureDetection(image1, prev_frame, keyframe_num);
-    // Feature::featureTracking(image1, image2, prev_frame, curr_frame);
-    
-    // Feature::get_pose_from_essential_mat(prev_frame, curr_frame, intrinsic_param);
-
-    // // Feature::vis_frame_2d_points(curr_frame, image2_c, true);
-
-    // bool is_initialize = false;
-    // int numFrame = 2;
-
-    // cv::Mat prev_Image, curr_Image;
-    // prev_Image = image2.clone();
-    // prev_frame = curr_frame;
-
-
-    // cv::Mat traj = cv::Mat::zeros(600, 800, CV_8UC3);
-
-    // while (is_initialize == false)
-    // {
-    //     // std::cout << "Frame start" << "\n";
-
-    //     sprintf(filename1, path_to_image, numFrame);
-    //     cv::Mat curr_Image_c = cv::imread(filename1);
-    //     cvtColor(curr_Image_c, curr_Image, cv::COLOR_BGR2GRAY);
-
-    //     // std::cout << " before tracking" << "\n";
-
-    //     Feature::featureTracking(prev_Image, curr_Image, prev_frame, curr_frame);
-
-    //     // std::cout << "vis " << "\n";
-
-    //     Feature::vis_frame_2d_points(curr_frame, curr_Image_c, false);
-
-
-    //     Feature::get_pose_from_essential_mat(prev_frame, curr_frame, intrinsic_param);
-
-
-    //     if (prev_frame.get_2d_points().size()<200)
-    //     {
-    //         Feature::featureDetection(prev_Image, prev_frame, keyframe_num);
-    //         Feature::featureTracking(prev_Image, curr_Image, prev_frame, curr_frame);
-    //     }
-
-
-
-    //     prev_Image = curr_Image.clone();
-    //     prev_frame = curr_frame;
-
-    //     int x = int(curr_frame.get_translation_mat().at<double>(0)) + 300;
-    //     int y = -int(curr_frame.get_translation_mat().at<double>(2)) + 400;
-
-    //     cv::circle(traj, cv::Point(x, y) ,1, CV_RGB(255,0,0), 2);
-    //     cv::imshow("traj", traj);
-    //     cv::waitKey(1);
-
-    //     numFrame++;
-    // }
 
     return 0;
 }
